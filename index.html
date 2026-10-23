@@ -1,0 +1,1175 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0A0C0F">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Prompter">
+<meta name="format-detection" content="telephone=no">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+</head>
+<body>
+<title>Teleprompter Pro</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,500..700&display=swap">
+<style>
+/* Layout: telas cheias empilhadas; leitura ocupa a tela, controles numa barra inferior ao alcance do polegar.
+   Visual único escuro (deliberado): teleprompter precisa de fundo preto e texto branco em qualquer tema. */
+:root{
+  --bg:#0A0C0F; --surface:#14171C; --surface-2:#1E222A; --line:#2A2F38;
+  --fg:#F3F5F7; --muted:#8E96A3; --accent:#FFB23E; --accent-ink:#1A1206;
+  --rec:#FF3B30; --ok:#3DDC84; --warn:#FFB23E; --read-bg:#000; --read-fg:#FFFFFF;
+  --f-display:"Bricolage Grotesque", ui-sans-serif, -apple-system, system-ui, sans-serif;
+  --f-body:-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Segoe UI", Roboto, sans-serif;
+  --f-read:"Atkinson Hyperlegible", -apple-system, system-ui, sans-serif;
+  --f-serif:"New York", ui-serif, Georgia, "Times New Roman", serif;
+  --f-mono:ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --band:42%;
+  color-scheme:dark;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+[hidden]{display:none!important}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:16px;overscroll-behavior:none;-webkit-text-size-adjust:100%}
+body{overflow:hidden}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;touch-action:manipulation}
+button:disabled{opacity:.35;cursor:default}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+svg.i{width:22px;height:22px;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+
+.view{position:fixed;inset:0;display:flex;flex-direction:column;background:var(--bg);
+  padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  animation:vin .2s ease}
+@keyframes vin{from{opacity:0;transform:translateY(6px)}}
+@media (prefers-reduced-motion:reduce){.view,.sheet{animation:none!important}}
+
+.bar{display:flex;align-items:center;gap:6px;min-height:56px;flex:none}
+.bar h1{font:700 22px/1.1 var(--f-display);letter-spacing:-.015em;margin:0;flex:1;min-width:0}
+.icon-btn{width:44px;height:44px;display:grid;place-items:center;border-radius:12px;flex:none}
+.icon-btn:active{background:var(--surface-2)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:52px;padding:0 18px;border-radius:14px;background:var(--surface-2);font-weight:600;font-size:17px;color:var(--fg)}
+.btn:active{filter:brightness(1.15)}
+.btn.primary{background:var(--accent);color:var(--accent-ink)}
+.btn.danger{color:var(--rec)}
+.btn.armed{background:var(--rec);color:#fff}
+.btn.wide{width:100%}
+
+/* Início */
+.h-top{display:flex;justify-content:space-between;align-items:center;min-height:56px;flex:none}
+.brand{display:flex;align-items:center;gap:10px;font:500 18px var(--f-display);letter-spacing:-.01em}
+.brand b{font-weight:700}
+.tally{width:10px;height:10px;border-radius:50%;background:var(--rec);box-shadow:0 0 0 4px rgba(255,59,48,.18)}
+.h-main{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:12px;padding-bottom:12px;width:100%;max-width:560px;margin:0 auto}
+.h-spacer{flex:1}
+.h-hero{font:700 clamp(36px,11vw,60px)/.98 var(--f-display);letter-spacing:-.035em;margin:8px 0 6px;text-wrap:balance}
+.h-hero span{color:var(--muted)}
+.tip{display:flex;gap:12px;align-items:flex-start;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:14px;font-size:14px;line-height:1.45;color:var(--muted)}
+.tip b{color:var(--fg)}
+.tip .icon-btn{width:32px;height:32px;margin:-6px -6px 0 auto}
+.continue{display:flex;align-items:center;gap:12px;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:14px 16px}
+.continue .c-body{flex:1;min-width:0}
+.eyebrow{display:block;font:600 11px var(--f-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--accent)}
+.c-name{display:block;font-weight:650;font-size:18px;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.c-meta{display:block;color:var(--muted);font-size:13px;margin-top:2px;font-variant-numeric:tabular-nums}
+.h-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.big{display:flex;flex-direction:column;align-items:flex-start;justify-content:space-between;gap:16px;min-height:118px;padding:16px;border-radius:18px;background:var(--surface);border:1px solid var(--line);text-align:left}
+.big .t{display:block;font-size:18px;font-weight:650}
+.big small{display:block;color:var(--muted);font-size:13px;margin-top:3px}
+.big.primary{grid-column:1/-1;flex-direction:row;align-items:center;justify-content:flex-start;min-height:84px;background:var(--accent);color:var(--accent-ink);border-color:transparent}
+.big.primary small{color:rgba(26,18,6,.72)}
+.big.primary .dot{width:36px;height:36px;border-radius:50%;background:var(--rec);box-shadow:0 0 0 5px rgba(26,18,6,.15);flex:none}
+.big.wide{grid-column:1/-1;flex-direction:row;align-items:center;justify-content:flex-start;min-height:60px;background:transparent}
+
+/* Biblioteca */
+.lib-list{list-style:none;margin:0;padding:0;flex:1;min-height:0;overflow:auto;-webkit-overflow-scrolling:touch}
+.lib-item{display:flex;align-items:center;gap:4px;border-bottom:1px solid var(--line)}
+.lib-open{flex:1;min-width:0;text-align:left;padding:14px 0}
+.lib-name{font-weight:600;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lib-meta{color:var(--muted);font-size:13px;margin-top:4px;font-variant-numeric:tabular-nums}
+.empty{flex:1;display:grid;place-content:center;text-align:center;color:var(--muted);gap:6px;padding:24px}
+.empty b{color:var(--fg);font:700 20px var(--f-display)}
+.foot{flex:none;padding:10px 0 8px}
+
+/* Editor */
+.editor{bottom:auto;height:var(--vvh,100%)}
+.title-input{flex:1;min-width:0;background:transparent;border:0;color:var(--fg);font:700 19px var(--f-display);letter-spacing:-.01em;padding:8px 6px;border-radius:10px}
+.title-input:focus{background:var(--surface)}
+#edText{flex:1;min-height:0;width:100%;resize:none;background:var(--surface);color:var(--fg);border:1px solid var(--line);border-radius:16px;padding:16px;font:18px/1.55 var(--f-body);-webkit-appearance:none}
+#edText::placeholder{color:var(--muted)}
+.ed-foot{flex:none;display:flex;flex-direction:column;gap:10px;padding:10px 0 8px}
+.stats{display:flex;gap:14px;color:var(--muted);font-size:13px;font-variant-numeric:tabular-nums;flex-wrap:wrap}
+.saved{margin-left:auto}
+.ed-actions{display:grid;grid-template-columns:1fr 1.4fr;gap:10px}
+
+/* Teleprompter (comum) */
+.prompter,.cam{padding:0;background:var(--read-bg)}
+.pv{position:relative;overflow:hidden;touch-action:none;flex:1;min-height:0;cursor:grab}
+.track{will-change:transform;padding-left:max(20px,env(safe-area-inset-left,0px));padding-right:max(20px,env(safe-area-inset-right,0px))}
+.ptext{margin:0 auto;white-space:pre-wrap;overflow-wrap:break-word;color:var(--read-fg);-webkit-font-smoothing:antialiased}
+.ptext.mirror{transform:scaleX(-1)}
+.cue{font:700 .5em var(--f-body);letter-spacing:.08em;text-transform:uppercase;color:var(--accent);vertical-align:.25em}
+.guide{position:absolute;left:0;right:0;pointer-events:none;background:rgba(255,178,62,.09);border-top:1px solid rgba(255,178,62,.45);border-bottom:1px solid rgba(255,178,62,.18)}
+.guide::before{content:"";position:absolute;left:4px;top:50%;margin-top:-7px;border:7px solid transparent;border-left:9px solid var(--accent)}
+.prompter .pv{-webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 16%,#000 80%,rgba(0,0,0,.3) 100%);mask-image:linear-gradient(to bottom,transparent 0,#000 16%,#000 80%,rgba(0,0,0,.3) 100%)}
+.hud{position:absolute;top:0;left:0;right:0;z-index:3;pointer-events:none;display:flex;flex-direction:column;gap:7px;background:linear-gradient(to bottom,#000 55%,rgba(0,0,0,0));padding-bottom:22px!important;
+  padding:calc(env(safe-area-inset-top,0px) + 8px) max(16px,env(safe-area-inset-right,0px)) 8px max(16px,env(safe-area-inset-left,0px))}
+.progress{height:3px;background:rgba(255,255,255,.14);border-radius:2px;overflow:hidden}
+.progress i{display:block;height:100%;width:0;background:var(--accent)}
+.hud-row{display:flex;justify-content:space-between;gap:12px;font:600 12px var(--f-mono);letter-spacing:.06em;color:rgba(255,255,255,.62);font-variant-numeric:tabular-nums;text-transform:uppercase}
+.pbar{flex:none;display:flex;align-items:center;justify-content:space-between;gap:2px;background:var(--read-bg);transition:opacity .35s;
+  padding:8px max(10px,env(safe-area-inset-right,0px)) calc(10px + env(safe-area-inset-bottom,0px)) max(10px,env(safe-area-inset-left,0px))}
+.pbar.dim{opacity:.28}
+.pb{width:48px;height:48px;display:grid;place-items:center;border-radius:50%;color:#fff;flex:none}
+.pb:active{background:rgba(255,255,255,.14)}
+.pb.play{width:64px;height:64px;background:var(--accent);color:var(--accent-ink)}
+.pb.play svg.i{width:26px;height:26px}
+.count{position:absolute;inset:0;z-index:6;display:grid;place-content:center;justify-items:center;gap:10px;background:rgba(0,0,0,.5);color:#fff}
+.count b{font:700 clamp(120px,40vw,220px)/1 var(--f-display);font-variant-numeric:tabular-nums}
+.count small{font:600 12px var(--f-mono);letter-spacing:.12em;text-transform:uppercase;color:rgba(255,255,255,.7)}
+.endmark{display:block;margin:1.2em 0 0;font:700 13px var(--f-mono);letter-spacing:.2em;color:var(--accent);text-align:center}
+
+/* Câmera */
+.cam video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000}
+.cam video.mirror{transform:scaleX(-1)}
+.camband{position:absolute;top:0;left:0;right:0;z-index:2;display:flex;flex-direction:column;
+  height:calc(env(safe-area-inset-top,0px) + var(--band));padding-top:env(safe-area-inset-top,0px);
+  background:linear-gradient(to bottom,rgba(0,0,0,.84),rgba(0,0,0,.66) 80%,rgba(0,0,0,0))}
+.camband .pv{-webkit-mask-image:linear-gradient(to bottom,#000 78%,transparent);mask-image:linear-gradient(to bottom,#000 78%,transparent)}
+.speedpill{position:absolute;right:max(10px,env(safe-area-inset-right,0px));top:calc(100% + 4px);z-index:3;display:flex;align-items:center;gap:2px;background:rgba(0,0,0,.55);border-radius:22px;padding:2px}
+.speedpill button{width:40px;height:40px;display:grid;place-items:center;border-radius:50%;color:#fff}
+.speedpill output{font:600 12px var(--f-mono);color:#fff;min-width:56px;text-align:center;font-variant-numeric:tabular-nums}
+.cambar{position:absolute;left:0;right:0;bottom:0;z-index:3;display:flex;align-items:center;justify-content:space-around;
+  padding:12px max(12px,env(safe-area-inset-right,0px)) calc(16px + env(safe-area-inset-bottom,0px)) max(12px,env(safe-area-inset-left,0px));
+  background:linear-gradient(to top,rgba(0,0,0,.6),transparent)}
+.cam .pb{background:rgba(0,0,0,.4);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+.recbtn{width:78px;height:78px;border-radius:50%;border:4px solid #fff;display:grid;place-items:center;flex:none}
+.recbtn i{width:60px;height:60px;border-radius:50%;background:var(--rec);transition:all .2s ease}
+.recbtn.on i{width:28px;height:28px;border-radius:7px}
+.recpill{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 118px);z-index:3;display:flex;align-items:center;gap:8px;
+  background:rgba(0,0,0,.55);border-radius:20px;padding:7px 14px;font:600 15px var(--f-mono);color:#fff;font-variant-numeric:tabular-nums}
+.recpill i{width:9px;height:9px;border-radius:50%;background:var(--rec);animation:blink 1s steps(2) infinite}
+@keyframes blink{50%{opacity:.2}}
+.camstate{position:absolute;inset:0;z-index:5;display:grid;place-content:center;justify-items:center;gap:14px;text-align:center;background:rgba(10,12,15,.94);
+  padding:24px max(24px,env(safe-area-inset-right,0px)) 24px max(24px,env(safe-area-inset-left,0px))}
+.camstate h2{font:700 22px var(--f-display);margin:0;max-width:22ch;text-wrap:balance}
+.camstate p{margin:0;color:var(--muted);line-height:1.5;max-width:40ch;font-size:15px}
+.camstate .acts{display:flex;flex-direction:column;gap:10px;width:min(320px,100%);margin-top:6px}
+
+/* Folhas, revisão, avisos */
+.sheet-wrap{position:fixed;inset:0;z-index:50;display:flex;align-items:flex-end;justify-content:center}
+.scrim{position:absolute;inset:0;background:rgba(0,0,0,.55)}
+.sheet-wrap.peek .scrim{background:rgba(0,0,0,.1)}
+.sheet{position:relative;width:100%;max-width:560px;max-height:88%;overflow:auto;-webkit-overflow-scrolling:touch;background:var(--surface);border-radius:22px 22px 0 0;border:1px solid var(--line);border-bottom:0;
+  padding:6px max(18px,env(safe-area-inset-right,0px)) calc(18px + env(safe-area-inset-bottom,0px)) max(18px,env(safe-area-inset-left,0px));animation:sheetin .22s ease}
+.sheet-wrap.peek .sheet{max-height:56%}
+@keyframes sheetin{from{transform:translateY(30px);opacity:0}}
+.grab{width:40px;height:5px;border-radius:3px;background:var(--line);margin:6px auto 12px}
+.sheet h2{font:700 20px var(--f-display);margin:0 0 6px;letter-spacing:-.01em}
+.sheet p.sub{color:var(--muted);margin:0 0 10px;font-size:14px;line-height:1.45}
+.row{display:flex;flex-direction:column;gap:6px;padding:12px 0;border-top:1px solid var(--line)}
+.row.inline{flex-direction:row;align-items:center;justify-content:space-between;gap:14px}
+.row-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;font-size:15px}
+.row-head output,.mono{font:600 13px var(--f-mono);color:var(--accent);font-variant-numeric:tabular-nums}
+input[type=range]{width:100%;accent-color:var(--accent);height:32px;margin:0}
+.seg{display:flex;background:var(--surface-2);border-radius:12px;padding:3px;gap:3px}
+.seg button{flex:1;min-height:40px;border-radius:9px;font-size:14px;font-weight:600;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--fg);color:var(--bg)}
+.tgl{width:52px;height:32px;border-radius:16px;background:var(--surface-2);border:1px solid var(--line);position:relative;flex:none}
+.tgl::after{content:"";position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;background:var(--muted);transition:left .2s,background .2s}
+.tgl[aria-checked="true"]{background:var(--accent);border-color:var(--accent)}
+.tgl[aria-checked="true"]::after{left:23px;background:var(--accent-ink)}
+.menu{display:flex;flex-direction:column}
+.menu button{display:flex;align-items:center;gap:14px;width:100%;min-height:54px;padding:0 4px;font-size:17px;border-top:1px solid var(--line);text-align:left}
+.menu button.danger{color:var(--rec)}
+.menu button.armed{background:var(--rec);color:#fff;border-radius:12px;padding:0 12px}
+.field{width:100%;min-height:50px;border-radius:12px;border:1px solid var(--line);background:var(--surface-2);color:var(--fg);font-size:17px;padding:0 14px;-webkit-appearance:none}
+.sheet .acts{display:flex;flex-direction:column;gap:10px;margin-top:14px}
+
+.review{position:fixed;inset:0;z-index:40;background:var(--bg);display:flex;flex-direction:column;gap:12px;
+  padding:calc(env(safe-area-inset-top,0px) + 10px) max(16px,env(safe-area-inset-right,0px)) calc(env(safe-area-inset-bottom,0px) + 14px) max(16px,env(safe-area-inset-left,0px))}
+.review video{flex:1;min-height:0;width:100%;background:#000;border-radius:16px;object-fit:contain}
+.rev-info{display:flex;flex-direction:column;gap:3px}
+.rev-info b{font-weight:650;font-size:16px;overflow-wrap:anywhere}
+.rev-info span{color:var(--muted);font-size:13px;font-variant-numeric:tabular-nums}
+.rev-info em{font-style:normal;color:var(--warn);font-size:13px}
+.rev-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.rev-actions .primary{grid-column:1/-1}
+.rev-hint{margin:0;color:var(--muted);font-size:12.5px;line-height:1.45}
+
+.toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 96px);transform:translateX(-50%);z-index:80;max-width:min(92vw,440px);
+  background:var(--fg);color:var(--bg);font-weight:600;font-size:15px;line-height:1.35;padding:12px 16px;border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,.4);text-align:center}
+
+/* Ajuda */
+.help-body{flex:1;min-height:0;overflow:auto;-webkit-overflow-scrolling:touch;padding-bottom:28px}
+.help-body article{max-width:640px;margin:0 auto;padding:18px 0;border-top:1px solid var(--line)}
+.help-body article:first-child{border-top:0;padding-top:4px}
+.help-body h2{font:700 21px/1.2 var(--f-display);letter-spacing:-.01em;margin:0 0 10px;text-wrap:balance}
+.help-body h3{font-size:16px;margin:14px 0 6px}
+.help-body p,.help-body li{color:#C9CED6;line-height:1.55;font-size:15.5px}
+.help-body p{margin:0 0 10px}
+.help-body ol,.help-body ul{margin:0 0 10px;padding-left:22px;display:flex;flex-direction:column;gap:6px}
+.help-body b{color:var(--fg)}
+.kbd{font:600 12px var(--f-mono);background:var(--surface-2);border:1px solid var(--line);border-radius:6px;padding:2px 6px;color:var(--fg)}
+.diag{width:100%;border-collapse:collapse;font-size:14px}
+.diag td{padding:10px 0;border-top:1px solid var(--line);vertical-align:top}
+.diag td:last-child{text-align:right;padding-left:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.st{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:8px;vertical-align:1px}
+.st.ok{background:var(--ok)} .st.warn{background:var(--warn)} .st.no{background:var(--rec)}
+</style>
+
+<!-- INÍCIO -->
+<section class="view home" id="v-home">
+  <header class="h-top">
+    <div class="brand"><span class="tally" aria-hidden="true"></span><span>Teleprompter <b>Pro</b></span></div>
+    <button class="icon-btn" data-go="help" aria-label="Ajuda, modos e instalação"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14M12 17.5h.01"/></svg></button>
+  </header>
+  <div class="h-main">
+    <div class="h-spacer"></div>
+    <h1 class="h-hero">Leia, grave,<br><span>sem decorar.</span></h1>
+    <div class="tip" id="installTip" hidden>
+      <div><b>Instale na Tela de Início.</b> No Safari, toque em Compartilhar e depois em “Adicionar à Tela de Início”. O app abre sem barras e funciona offline.</div>
+      <button class="icon-btn" id="tipClose" data-i="close" aria-label="Fechar aviso"></button>
+    </div>
+    <button class="continue" id="continueCard" hidden>
+      <span class="c-body"><span class="eyebrow">Último roteiro</span><span class="c-name" id="cName"></span><span class="c-meta" id="cMeta"></span></span>
+      <svg class="i" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+    </button>
+    <div class="h-grid">
+      <button class="big" id="btnNew" data-i="plus"><span><span class="t">Novo roteiro</span><small>Escrever ou colar</small></span></button>
+      <button class="big" data-go="library" data-i="list"><span><span class="t">Meus roteiros</span><small id="libCount">0 salvos</small></span></button>
+      <button class="big primary" id="btnRecord"><span class="dot" aria-hidden="true"></span><span><span class="t">Gravar</span><small>Câmera do iPhone com o texto por cima</small></span></button>
+      <button class="big wide" id="btnRead" data-i="read"><span><span class="t">Ler em tela cheia</span></span></button>
+    </div>
+  </div>
+</section>
+
+<!-- BIBLIOTECA -->
+<section class="view" id="v-library" hidden>
+  <header class="bar">
+    <button class="icon-btn" data-back data-i="back" aria-label="Voltar"></button>
+    <h1>Meus roteiros</h1>
+    <button class="icon-btn" id="libImport" data-i="import" aria-label="Importar arquivo TXT"></button>
+  </header>
+  <ul class="lib-list" id="libList"></ul>
+  <div class="empty" id="libEmpty" hidden><b>Nenhum roteiro ainda</b><span>Crie um novo ou importe um arquivo .txt.</span></div>
+  <div class="foot"><button class="btn primary wide" id="libNew" data-i="plus">Novo roteiro</button></div>
+  <input type="file" id="fileTxt" accept=".txt,text/plain" multiple hidden>
+</section>
+
+<!-- EDITOR -->
+<section class="view editor" id="v-editor" hidden>
+  <header class="bar">
+    <button class="icon-btn" data-back data-i="back" aria-label="Voltar"></button>
+    <input id="edName" class="title-input" aria-label="Nome do roteiro" maxlength="80" autocomplete="off">
+    <button class="icon-btn" id="edMore" data-i="more" aria-label="Mais opções"></button>
+  </header>
+  <textarea id="edText" aria-label="Texto do roteiro" placeholder="Escreva ou cole seu roteiro aqui.&#10;&#10;Use [colchetes] para marcações de direção, como [PAUSA] ou [olhar para a câmera]. Elas aparecem destacadas na leitura e não contam como palavras."></textarea>
+  <div class="ed-foot">
+    <div class="stats"><span id="edWords">0 palavras</span><span id="edDur">≈ 0:00</span><span class="saved" id="edSaved">Salvo</span></div>
+    <div class="ed-actions">
+      <button class="btn" id="edRead" data-i="read">Ler</button>
+      <button class="btn primary" id="edRec" data-i="rec">Gravar</button>
+    </div>
+  </div>
+</section>
+
+<!-- MODO B: LEITURA -->
+<section class="view prompter" id="v-read" hidden>
+  <div class="pv" id="rdVp">
+    <div class="track" id="rdTrack"><div class="ptext" id="rdText"></div></div>
+    <div class="guide" id="rdGuide"></div>
+  </div>
+  <div class="hud">
+    <div class="progress"><i id="rdProg"></i></div>
+    <div class="hud-row"><span id="rdSpeed">140 ppm</span><span id="rdLeft">restam 0:00</span></div>
+  </div>
+  <div class="count" id="rdCount" hidden><b>3</b><small>Toque para cancelar</small></div>
+  <div class="pbar" id="rdBar">
+    <button class="pb" id="rdClose" data-i="close" aria-label="Fechar leitura"></button>
+    <button class="pb" id="rdRestart" data-i="restart" aria-label="Voltar ao início do texto"></button>
+    <button class="pb" id="rdSlower" data-i="minus" aria-label="Mais devagar"></button>
+    <button class="pb play" id="rdPlay" aria-label="Iniciar"></button>
+    <button class="pb" id="rdFaster" data-i="plus" aria-label="Mais rápido"></button>
+    <button class="pb" id="rdSettings" data-i="sliders" aria-label="Ajustes de leitura"></button>
+  </div>
+</section>
+
+<!-- MODO A: CÂMERA -->
+<section class="view cam" id="v-cam" hidden>
+  <video id="camVideo" playsinline muted autoplay></video>
+  <div class="camband">
+    <div class="pv" id="cmVp">
+      <div class="track" id="cmTrack"><div class="ptext" id="cmText"></div></div>
+      <div class="guide" id="cmGuide"></div>
+    </div>
+    <div class="speedpill">
+      <button id="cmSlower" data-i="minus" aria-label="Mais devagar"></button>
+      <output id="cmSpeed">140 ppm</output>
+      <button id="cmFaster" data-i="plus" aria-label="Mais rápido"></button>
+    </div>
+  </div>
+  <div class="recpill" id="recPill" hidden><i></i><span id="recTime">00:00</span></div>
+  <div class="count" id="cmCount" hidden><b>3</b><small>Toque para cancelar</small></div>
+  <div class="cambar">
+    <button class="pb" id="cmClose" data-i="close" aria-label="Fechar câmera"></button>
+    <button class="pb" id="cmFlip" data-i="flip" aria-label="Trocar câmera frontal ou traseira"></button>
+    <button class="recbtn" id="cmRec" aria-label="Gravar"><i></i></button>
+    <button class="pb" id="cmPlay" aria-label="Rolar texto"></button>
+    <button class="pb" id="cmSettings" data-i="sliders" aria-label="Ajustes da câmera e do texto"></button>
+  </div>
+  <div class="camstate" id="camState" hidden>
+    <h2 id="csTitle">Abrindo câmera…</h2>
+    <p id="csText"></p>
+    <div class="acts" id="csActs"></div>
+  </div>
+</section>
+
+<!-- AJUDA -->
+<section class="view" id="v-help" hidden>
+  <header class="bar">
+    <button class="icon-btn" data-back data-i="back" aria-label="Voltar"></button>
+    <h1>Modos, instalação e limites</h1>
+  </header>
+  <div class="help-body">
+    <article>
+      <h2>Diagnóstico deste aparelho</h2>
+      <p>O que o navegador em uso libera agora. Rode no iPhone, de preferência com o app já instalado.</p>
+      <table class="diag" id="diag"></table>
+    </article>
+    <article>
+      <h2>Instalar no iPhone</h2>
+      <ol>
+        <li>Abra o endereço do app no <b>Safari</b>.</li>
+        <li>Toque em <b>Compartilhar</b> (o quadrado com a seta). Em versões recentes do iOS ele pode estar dentro do menu <b>•••</b>.</li>
+        <li>Escolha <b>Adicionar à Tela de Início</b> e confirme.</li>
+        <li>Abra sempre pelo ícone. Assim o app ocupa a tela inteira e funciona sem internet depois do primeiro acesso.</li>
+      </ol>
+      <p>Isto é um app web instalado (PWA), não um app da App Store. Ele não aparece na App Store, não recebe atualizações por lá e depende do motor do Safari.</p>
+    </article>
+    <article>
+      <h2>Os três modos</h2>
+      <h3>A · Câmera integrada</h3>
+      <p>Toque em <b>Gravar</b>. A câmera ocupa a tela e o texto rola na faixa de cima, perto da lente frontal, para o olhar desviar pouco. O arquivo gravado contém só a imagem da câmera e o áudio, sem o texto.</p>
+      <h3>B · Leitura em tela cheia</h3>
+      <p>Toque em <b>Ler em tela cheia</b>. Só o texto, grande, com rolagem automática. Use em outro aparelho, em um prompter com espelho (ative <b>Espelhar texto</b>) ou para ensaiar.</p>
+      <h3>C · Dois aparelhos</h3>
+      <p>Grave com o app <b>Câmera</b> nativo do iPhone e leia o roteiro em outro aparelho (iPad, outro celular ou notebook) apoiado logo acima ou atrás da lente, no Modo B.</p>
+      <p>Para levar o roteiro ao outro aparelho: abra o roteiro, toque em <b>•••</b> e em <b>Enviar para outro aparelho</b>. O texto vai dentro do próprio link (depois do #), que não é enviado a nenhum servidor. Abra o link no outro aparelho e salve.</p>
+      <p><b>Por que o texto não flutua sobre o app Câmera:</b> o iOS não deixa uma página web desenhar por cima de outro app, e o Safari suspende a página assim que você troca de app. Nenhum teleprompter web consegue isso no iPhone. Apps nativos da App Store conseguem gravar com texto na tela porque usam a câmera diretamente, não porque flutuam sobre o app Câmera.</p>
+    </article>
+    <article>
+      <h2>Quando usar cada um</h2>
+      <ul>
+        <li><b>Modo A</b> para Reels, Shorts e UGC falados para a câmera frontal: rápido, um aparelho só.</li>
+        <li><b>Modo C</b> quando a imagem importa mais: 4K, estabilização, Modo Cinema, troca de lente e trava de foco e exposição só existem no app Câmera nativo.</li>
+      </ul>
+    </article>
+    <article>
+      <h2>Controles</h2>
+      <ul>
+        <li>Toque no texto para pausar ou continuar. Arraste para voltar ou avançar.</li>
+        <li>A velocidade é em <b>ppm</b> (palavras por minuto). Fala natural fica entre 130 e 160 ppm. Mudar a velocidade não reinicia o texto.</li>
+        <li>Teclado ou controle Bluetooth: <span class="kbd">Espaço</span> pausa, <span class="kbd">→</span> <span class="kbd">←</span> mudam a velocidade, <span class="kbd">↑</span> <span class="kbd">↓</span> movem o texto, <span class="kbd">R</span> volta ao início.</li>
+        <li>Marcações entre [colchetes] aparecem em destaque e não entram na contagem de palavras nem na estimativa de duração.</li>
+      </ul>
+    </article>
+    <article>
+      <h2>Limites do iPhone</h2>
+      <ul>
+        <li><b>Trocar de app ou bloquear a tela</b> faz o iOS cortar câmera e microfone. O app encerra a gravação, pausa o texto e tenta preservar o trecho já gravado para revisão.</li>
+        <li><b>A tomada fica na memória</b> até você salvar. Tomadas muito longas (acima de uns 10 minutos) podem fazer o Safari recarregar a página e perder o vídeo. Salve cada tomada antes da próxima.</li>
+        <li><b>Câmera frontal:</b> a prévia aparece espelhada, como um espelho; o arquivo sai na orientação real. Evite girar o aparelho durante a gravação.</li>
+        <li><b>Formato:</b> no iPhone a gravação costuma sair em MP4 (H.264 + AAC), que o app Fotos aceita. O formato real aparece no Diagnóstico.</li>
+        <li><b>Revisão com som:</b> o app desliga a câmera e o microfone ao abrir a revisão, para o áudio sair pelo alto-falante e liberar memória.</li>
+        <li><b>Tela cheia:</b> no iPhone o Safari não libera tela cheia para páginas. Instalado na Tela de Início, o app já abre sem barras.</li>
+        <li><b>Seus roteiros ficam neste aparelho.</b> O app instalado e o Safari guardam dados separados; o que você salva em um não aparece no outro. Exporte em TXT para ter cópia.</li>
+        <li>O iOS pode pedir de novo a permissão de câmera e microfone em aberturas futuras. Isso é do sistema.</li>
+      </ul>
+    </article>
+    <article>
+      <h2>Privacidade</h2>
+      <p>Sem conta, sem assinatura, sem servidor. Roteiros e vídeos ficam no aparelho. O único acesso externo é o download das fontes tipográficas no primeiro uso.</p>
+    </article>
+  </div>
+</section>
+
+<!-- FOLHA -->
+<div class="sheet-wrap" id="sheet" hidden>
+  <div class="scrim" id="sheetScrim"></div>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+    <div class="grab"></div>
+    <h2 id="sheetTitle"></h2>
+    <div id="sheetBody"></div>
+  </div>
+</div>
+
+<!-- REVISÃO DA TOMADA -->
+<div class="review" id="review" hidden>
+  <video id="revVideo" playsinline controls preload="metadata"></video>
+  <div class="rev-info" id="revInfo"></div>
+  <div class="rev-actions">
+    <button class="btn primary" id="revShare" data-i="share">Salvar ou compartilhar</button>
+    <button class="btn" id="revRetake" data-i="restart">Nova tomada</button>
+    <button class="btn" id="revExit">Sair</button>
+  </div>
+  <p class="rev-hint">No iPhone, toque em <b>Salvar Vídeo</b> no menu de compartilhamento para mandar a tomada ao app Fotos. Ela só fica na memória até você salvar.</p>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<script>
+(() => {
+'use strict';
+
+/* ---------- utilidades ---------- */
+const ICONS = {
+  plus:'<path d="M12 5v14M5 12h14"/>',
+  minus:'<path d="M5 12h14"/>',
+  list:'<path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/>',
+  read:'<path d="M4 6h16M4 10h16M4 14h10M4 18h13"/>',
+  rec:'<circle cx="12" cy="12" r="6.5" fill="currentColor" stroke="none"/>',
+  back:'<path d="M15 18l-6-6 6-6"/>',
+  close:'<path d="M6 6l12 12M18 6L6 18"/>',
+  more:'<circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none"/>',
+  sliders:'<path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/>',
+  play:'<path d="M7 4.5l12.5 7.5L7 19.5z" fill="currentColor" stroke="none"/>',
+  pause:'<path d="M7 4.5h3.6v15H7zM13.4 4.5H17v15h-3.6z" fill="currentColor" stroke="none"/>',
+  restart:'<path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1L3.5 8.5"/><path d="M3.5 3.5v5h5"/>',
+  flip:'<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><path d="M9.2 12.6a3 3 0 0 1 5.3-1.6M14.8 13.4a3 3 0 0 1-5.3 1.6M14.6 9.6v1.6H13M9.4 16.4v-1.6H11"/>',
+  share:'<path d="M12 3.5v12M7.5 8L12 3.5 16.5 8M5 12.5V20h14v-7.5"/>',
+  import:'<path d="M12 3.5v12M7.5 11l4.5 4.5 4.5-4.5M5 20h14"/>',
+  copy:'<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/>',
+  edit:'<path d="M4 20h4L19 9l-4-4L4 16z"/>',
+  trash:'<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>',
+  send:'<path d="M4 12l16-8-6 16-2.5-6.5z"/>',
+  full:'<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>'
+};
+const svg = n => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${ICONS[n]||''}</svg>`;
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const pad2 = n => String(n).padStart(2, '0');
+const slug = s => (s || 'roteiro').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'roteiro';
+function fmtDur(sec){ sec = Math.max(0, Math.round(sec)); const m = Math.floor(sec / 60); return m + ':' + pad2(sec % 60); }
+function fmtClock(sec){ sec = Math.max(0, Math.floor(sec)); return pad2(Math.floor(sec / 60)) + ':' + pad2(sec % 60); }
+function fmtDate(ts){
+  const d = new Date(ts), now = new Date();
+  const hm = d.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
+  if (d.toDateString() === now.toDateString()) return 'hoje ' + hm;
+  return d.toLocaleDateString('pt-BR', {day:'2-digit', month:'short'}).replace('.', '');
+}
+
+const inFrame = (() => { try { return window.self !== window.top; } catch (e) { return true; } })();
+const isStandalone = navigator.standalone === true || (window.matchMedia && matchMedia('(display-mode: standalone)').matches);
+const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const fsSupported = !!(document.fullscreenEnabled || document.webkitFullscreenEnabled);
+
+/* ---------- texto ---------- */
+const CUE_RE = /\[[^\]\n]*\]/g;
+function countWords(t){ const m = String(t || '').replace(CUE_RE, ' ').match(/[\p{L}\p{N}][\p{L}\p{N}'’\-]*/gu); return m ? m.length : 0; }
+function renderScriptHTML(t){ return esc(t || '').replace(/\[([^\]\n]*)\]/g, '<span class="cue">$1</span>') + '<span class="endmark">FIM</span>'; }
+const estSec = w => w / S.wpm * 60;
+
+/* ---------- armazenamento local ---------- */
+const K = {scripts:'tp.scripts.v1', settings:'tp.settings.v1', tip:'tp.tipclosed'};
+function load(k, d){ try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } }
+function save(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } }
+
+const DEF = {wpm:140, font:46, camFont:28, line:1.4, width:94, align:'left', face:'read', mirror:false, countdown:3, guide:true, camBand:42, camAutoScroll:true, facing:'user', lastId:null};
+let S = Object.assign({}, DEF, load(K.settings, {}));
+const saveSettings = () => save(K.settings, S);
+
+let scripts = load(K.scripts, null);
+if (!Array.isArray(scripts)) {
+  scripts = [{
+    id: uid(), name: 'Exemplo — vídeo de viagem', created: Date.now(), updated: Date.now(), takes: 0,
+    text: '[olhar para a câmera]\nTrês dias, uma mochila e nenhum plano fixo. Foi assim que eu cheguei aqui.\n\nHoje eu vou te mostrar os lugares que valeram cada passo, quanto eu gastei de verdade e o erro que eu não repetiria.\n\n[PAUSA]\n\nPrimeiro: chegue cedo. Antes das nove, a cidade ainda é dos moradores. O café custa menos, as ruas estão vazias e a luz é a melhor do dia para gravar.\n\nSegundo: ande sem pressa. Os melhores lugares desta viagem eu não achei em nenhuma lista. Achei virando a esquina errada.\n\n[mostrar a rua]\n\nE terceiro: separe um dinheiro para o imprevisto. Ele sempre aparece.\n\nSe este vídeo te ajudou, salva para a sua próxima viagem e me conta nos comentários para onde você vai.'
+  }];
+  save(K.scripts, scripts);
+}
+function persist(){ if (!save(K.scripts, scripts)) toast('Não foi possível salvar neste aparelho. Exporte o roteiro em TXT por segurança.'); }
+const byId = id => scripts.find(s => s.id === id);
+function createScript(name, text){
+  const sc = {id: uid(), name: name || ('Roteiro ' + new Date().toLocaleDateString('pt-BR')), text: text || '', created: Date.now(), updated: Date.now(), takes: 0};
+  scripts.push(sc); persist(); return sc;
+}
+function setLast(id){ S.lastId = id; saveSettings(); }
+try { navigator.storage && navigator.storage.persist && navigator.storage.persist().catch(() => {}); } catch (e) {}
+
+/* ---------- avisos ---------- */
+let toastT;
+function toast(msg, ms = 3200){ const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, ms); }
+function armConfirm(btn, label, action){
+  if (btn.dataset.armed) { action(); return; }
+  const old = btn.innerHTML; btn.dataset.armed = '1'; btn.classList.add('armed'); btn.textContent = label;
+  setTimeout(() => { if (btn.isConnected && btn.dataset.armed) { delete btn.dataset.armed; btn.classList.remove('armed'); btn.innerHTML = old; } }, 3500);
+}
+
+/* ---------- navegação ---------- */
+let current = 'home'; const stack = [];
+const VIEWS = ['home', 'library', 'editor', 'read', 'cam', 'help'];
+function show(v){
+  const prev = current; if (prev === v) return;
+  onLeave(prev, v);
+  VIEWS.forEach(n => { $('#v-' + n).hidden = n !== v; });
+  current = v; onEnter(v);
+}
+function go(v){ stack.push(current); show(v); }
+function back(){ const v = stack.pop() || 'home'; show(v); }
+function onLeave(v, next){
+  if (v === 'editor') flushEditor();
+  if (v === 'read') { readP.pause(); cdCancel(); }
+  if (v === 'cam') { if (isRecording()) stopRec(false); camP.pause(); cdCancel(); stopStream(); }
+  if ((v === 'read' || v === 'cam') && next !== 'read' && next !== 'cam') releaseWake();
+}
+function onEnter(v){
+  if (v === 'home') renderHome();
+  if (v === 'library') renderLibrary();
+  if (v === 'help') renderDiag();
+  if (v === 'read') { requestWake(); requestAnimationFrame(() => readP.layout()); }
+  if (v === 'cam') { requestWake(); requestAnimationFrame(() => camP.layout()); startCamera(); }
+}
+
+/* ---------- motor de rolagem ---------- */
+class Prompter {
+  constructor(o){ Object.assign(this, o); this.y = 0; this.running = false; this.held = false; this.endY = 1; this.words = 1; this.raf = 0; this._step = this._step.bind(this); this._bind(); }
+  load(sc){ this.text.innerHTML = renderScriptHTML(sc.text); this.words = Math.max(1, countWords(sc.text)); this.y = 0; this.endY = 1; this.layout(); }
+  layout(){
+    const st = this.text.style, f = S[this.fontKey];
+    st.fontSize = f + 'px'; st.lineHeight = S.line; st.textAlign = S.align;
+    st.maxWidth = (this.widthKey ? S[this.widthKey] : 100) + '%';
+    st.fontFamily = S.face === 'system' ? 'var(--f-body)' : S.face === 'serif' ? 'var(--f-serif)' : 'var(--f-read)';
+    this.text.classList.toggle('mirror', !!(this.allowMirror && S.mirror));
+    const h = this.vp.clientHeight || window.innerHeight;
+    const ratio = this.endY > 1 ? this.y / this.endY : 0;
+    this.marker = Math.round(h * this.markerRatio);
+    this.track.style.paddingTop = this.marker + 'px';
+    this.track.style.paddingBottom = h + 'px';
+    const lh = f * S.line;
+    const endEl = this.text.querySelector('.endmark');
+    const textH = endEl ? endEl.offsetTop - this.text.offsetTop : this.text.offsetHeight;
+    this.endY = Math.max(1, textH - lh);
+    this.y = clamp(ratio * this.endY, 0, this.endY);
+    if (this.guide) { this.guide.style.top = this.marker + 'px'; this.guide.style.height = lh + 'px'; this.guide.hidden = !S.guide; }
+    this.render();
+  }
+  pps(){ return this.endY / Math.max(1, this.words / S.wpm * 60); }
+  remaining(){ return (this.endY - this.y) / this.pps(); }
+  progress(){ return clamp(this.y / this.endY, 0, 1); }
+  atStart(){ return this.y < 1; }
+  play(){ if (this.running) return; if (this.y >= this.endY - 1) this.y = 0; this.running = true; this.last = performance.now(); this.raf = requestAnimationFrame(this._step); this.onState && this.onState(true); }
+  pause(){ if (!this.running) return; this.running = false; cancelAnimationFrame(this.raf); this.onState && this.onState(false); }
+  restart(){ this.pause(); this.y = 0; this.render(); }
+  _step(t){
+    if (!this.running) return;
+    const dt = Math.min(0.1, (t - this.last) / 1000); this.last = t;
+    if (!this.held) this.y += this.pps() * dt;
+    if (this.y >= this.endY) { this.y = this.endY; this.render(); this.pause(); this.onEnd && this.onEnd(); return; }
+    this.render(); this.raf = requestAnimationFrame(this._step);
+  }
+  render(){ this.track.style.transform = `translate3d(0,${(-this.y).toFixed(1)}px,0)`; this.onTick && this.onTick(this); }
+  nudge(dy){ this.y = clamp(this.y + dy, 0, this.endY); this.render(); }
+  _bind(){
+    const vp = this.vp; let d = null;
+    vp.addEventListener('pointerdown', e => { if (e.button > 0) return; d = {id: e.pointerId, y0: e.clientY, ys: this.y, moved: false}; try { vp.setPointerCapture(e.pointerId); } catch (_) {} });
+    vp.addEventListener('pointermove', e => {
+      if (!d || e.pointerId !== d.id) return;
+      const dy = e.clientY - d.y0;
+      if (!d.moved && Math.abs(dy) > 8) { d.moved = true; this.held = true; }
+      if (d.moved) { this.y = clamp(d.ys - dy, 0, this.endY); this.render(); }
+    });
+    const end = e => { if (!d || e.pointerId !== d.id) return; const tap = !d.moved && e.type === 'pointerup'; d = null; this.held = false; if (tap && this.onTap) this.onTap(); };
+    vp.addEventListener('pointerup', end); vp.addEventListener('pointercancel', end);
+    vp.addEventListener('wheel', e => { e.preventDefault(); this.nudge(e.deltaY); }, {passive: false});
+  }
+}
+
+const readP = new Prompter({vp: $('#rdVp'), track: $('#rdTrack'), text: $('#rdText'), guide: $('#rdGuide'), markerRatio: .3, fontKey: 'font', widthKey: 'width', allowMirror: true});
+const camP = new Prompter({vp: $('#cmVp'), track: $('#cmTrack'), text: $('#cmText'), guide: $('#cmGuide'), markerRatio: .2, fontKey: 'camFont', widthKey: null, allowMirror: false});
+
+function speedLabels(){ $('#rdSpeed').textContent = S.wpm + ' ppm'; $('#cmSpeed').textContent = S.wpm + ' ppm'; readP.onTick && readP.onTick(readP); }
+function setWpm(v){ S.wpm = clamp(Math.round(v / 5) * 5, 60, 260); saveSettings(); speedLabels(); }
+
+/* contagem regressiva */
+let cd = null;
+function countdown(el, n){
+  return new Promise(res => {
+    if (!n) return res(true);
+    if (cd) return res(false);
+    let k = n; const num = el.querySelector('b'); num.textContent = k; el.hidden = false;
+    const iv = setInterval(() => { k--; if (k <= 0) done(true); else num.textContent = k; }, 1000);
+    const onTap = () => done(false);
+    el.addEventListener('pointerup', onTap);
+    function done(v){ clearInterval(iv); el.hidden = true; el.removeEventListener('pointerup', onTap); cd = null; res(v); }
+    cd = {cancel: () => done(false)};
+  });
+}
+const cdCancel = () => cd && cd.cancel();
+
+/* ---------- modo B: leitura ---------- */
+let activeId = null;
+function openRead(id){
+  const sc = byId(id); if (!sc) return;
+  activeId = id; setLast(id);
+  readP.load(sc); go('read');
+}
+readP.onTick = p => {
+  $('#rdProg').style.width = (p.progress() * 100).toFixed(2) + '%';
+  $('#rdLeft').textContent = 'restam ' + fmtDur(p.remaining());
+};
+readP.onState = on => { $('#rdPlay').innerHTML = svg(on ? 'pause' : 'play'); $('#rdPlay').setAttribute('aria-label', on ? 'Pausar' : (readP.atStart() ? 'Iniciar' : 'Continuar')); $('#rdBar').classList.toggle('dim', on); };
+readP.onEnd = () => toast('Fim do roteiro.');
+async function readToggle(){
+  if (readP.running) { readP.pause(); return; }
+  if (readP.atStart() && S.countdown > 0) { if (!(await countdown($('#rdCount'), S.countdown))) return; }
+  readP.play();
+}
+readP.onTap = readToggle;
+$('#rdPlay').addEventListener('click', readToggle);
+$('#rdRestart').addEventListener('click', () => readP.restart());
+$('#rdSlower').addEventListener('click', () => setWpm(S.wpm - 5));
+$('#rdFaster').addEventListener('click', () => setWpm(S.wpm + 5));
+$('#rdClose').addEventListener('click', back);
+$('#rdSettings').addEventListener('click', openReadSettings);
+let dimT;
+$('#rdBar').addEventListener('pointerdown', () => { $('#rdBar').classList.remove('dim'); clearTimeout(dimT); dimT = setTimeout(() => { if (readP.running) $('#rdBar').classList.add('dim'); }, 3000); });
+
+/* ---------- modo A: câmera ---------- */
+const cam = {stream: null, rec: null, chunks: [], mime: '', t0: 0, timer: 0, take: null, starting: false, interrupted: false, dur: 0, warned: false};
+const isRecording = () => !!(cam.rec && cam.rec.state !== 'inactive');
+function openCam(id){
+  const sc = byId(id); if (!sc) return;
+  activeId = id; setLast(id);
+  camP.load(sc); go('cam');
+}
+camP.onState = on => { $('#cmPlay').innerHTML = svg(on ? 'pause' : 'play'); $('#cmPlay').setAttribute('aria-label', on ? 'Pausar texto' : 'Rolar texto'); };
+camP.onTap = () => camP.running ? camP.pause() : camP.play();
+$('#cmPlay').addEventListener('click', camP.onTap);
+$('#cmSlower').addEventListener('click', () => setWpm(S.wpm - 5));
+$('#cmFaster').addEventListener('click', () => setWpm(S.wpm + 5));
+$('#cmClose').addEventListener('click', () => { if (isRecording()) { stopRec(false); return; } back(); });
+$('#cmFlip').addEventListener('click', () => { if (isRecording()) return; S.facing = S.facing === 'user' ? 'environment' : 'user'; saveSettings(); startCamera(); });
+$('#cmRec').addEventListener('click', toggleRec);
+$('#cmSettings').addEventListener('click', openCamSettings);
+
+function camState(title, text, acts){
+  const st = $('#camState');
+  if (!title) { st.hidden = true; return; }
+  $('#csTitle').textContent = title; $('#csText').textContent = text || '';
+  const a = $('#csActs'); a.innerHTML = '';
+  (acts || []).forEach(([label, fn, primary]) => { const b = document.createElement('button'); b.className = 'btn wide' + (primary ? ' primary' : ''); b.textContent = label; b.addEventListener('click', fn); a.append(b); });
+  st.hidden = false;
+}
+function camFail(title, text){
+  camState(title, text, [
+    ['Tentar de novo', startCamera, true],
+    ['Usar só o texto (Modo B)', () => { const id = activeId; stack.pop(); show('home'); openRead(id); }],
+    ['Voltar', back]
+  ]);
+}
+function camLive(){
+  if (!cam.stream) return false;
+  const v = cam.stream.getVideoTracks()[0];
+  return !!(v && v.readyState === 'live' && !v.muted);
+}
+function stopStream(){
+  if (cam.stream) cam.stream.getTracks().forEach(t => { try { t.stop(); } catch (_) {} });
+  cam.stream = null;
+  const v = $('#camVideo'); v.srcObject = null;
+}
+async function startCamera(){
+  if (current !== 'cam' || cam.take || cam.starting) return;
+  if (!window.isSecureContext) return camFail('A câmera precisa de HTTPS', 'Abra o app por um endereço https:// (como o do GitHub Pages). Por http:// o iPhone bloqueia câmera e microfone.');
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    return camFail('Câmera indisponível aqui', inFrame
+      ? 'Esta prévia roda dentro de outra página, que bloqueia câmera e microfone. Use a versão publicada no seu iPhone para gravar. O Modo B funciona aqui.'
+      : 'Este navegador não libera a câmera para páginas web. No iPhone, use o Safari atualizado.');
+  }
+  cam.starting = true;
+  camState('Abrindo câmera…', 'Se o iPhone perguntar, permita câmera e microfone.');
+  stopStream();
+  const facing = S.facing;
+  const video = {facingMode: {ideal: facing}, width: {ideal: 1920}, height: {ideal: 1080}, frameRate: {ideal: 30}};
+  const audio = {echoCancellation: true, noiseSuppression: true, autoGainControl: true};
+  try {
+    let s;
+    try { s = await navigator.mediaDevices.getUserMedia({video, audio}); }
+    catch (e) {
+      if (e && (e.name === 'OverconstrainedError' || e.name === 'ConstraintNotSatisfiedError' || e.name === 'TypeError')) s = await navigator.mediaDevices.getUserMedia({video: {facingMode: facing}, audio: true});
+      else throw e;
+    }
+    if (current !== 'cam') { s.getTracks().forEach(t => t.stop()); return; }
+    cam.stream = s;
+    const v = $('#camVideo'); v.srcObject = s; v.classList.toggle('mirror', facing === 'user');
+    try { await v.play(); } catch (_) {}
+    camState(null);
+    const vt = s.getVideoTracks()[0];
+    if (vt) vt.addEventListener('ended', () => { if (current === 'cam' && !document.hidden && !cam.take) camFail('A câmera foi desligada', 'O sistema encerrou o acesso à câmera. Toque em Tentar de novo.'); });
+  } catch (e) {
+    const n = e && e.name;
+    if (n === 'NotAllowedError' || n === 'SecurityError') camFail('Câmera ou microfone bloqueados', inFrame
+      ? 'Esta prévia roda dentro de outra página, que bloqueia câmera e microfone. Use a versão publicada no seu iPhone para gravar.'
+      : 'No Safari: toque em “aA” (ou no ícone à esquerda do endereço), Ajustes do Site, e permita Câmera e Microfone. No app instalado: Ajustes do iPhone › Apps › Safari › Câmera e Microfone.');
+    else if (n === 'NotFoundError' || n === 'OverconstrainedError') camFail('Câmera não encontrada', 'Nenhuma câmera ou microfone compatível foi encontrado neste aparelho.');
+    else if (n === 'NotReadableError' || n === 'AbortError') camFail('A câmera está em uso', 'Outro app está usando a câmera ou o microfone (ligação, FaceTime, Câmera). Feche-o e tente de novo.');
+    else camFail('Não foi possível abrir a câmera', (e && e.message) || 'Erro desconhecido.');
+  } finally { cam.starting = false; }
+}
+function pickMime(){
+  if (!window.MediaRecorder || !MediaRecorder.isTypeSupported) return '';
+  const c = ['video/mp4;codecs=avc1.640028,mp4a.40.2', 'video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+  for (const m of c) { try { if (MediaRecorder.isTypeSupported(m)) return m; } catch (_) {} }
+  return '';
+}
+async function toggleRec(){
+  if (isRecording()) { stopRec(false); return; }
+  if (!camLive()) { startCamera(); return; }
+  if (!window.MediaRecorder) { toast('Este navegador não grava vídeo. No iPhone é preciso iOS 14.3 ou superior.', 4500); return; }
+  $('#cmRec').disabled = true;
+  const ok = await countdown($('#cmCount'), S.countdown);
+  $('#cmRec').disabled = false;
+  if (!ok || current !== 'cam') return;
+  if (startRec() && S.camAutoScroll) camP.play();
+}
+function startRec(){
+  cam.mime = pickMime(); cam.chunks = []; cam.interrupted = false; cam.warned = false;
+  let r;
+  const opts = cam.mime ? {mimeType: cam.mime, videoBitsPerSecond: 6000000, audioBitsPerSecond: 128000} : undefined;
+  try { r = new MediaRecorder(cam.stream, opts); }
+  catch (e) { try { r = new MediaRecorder(cam.stream); } catch (e2) { toast('Não foi possível iniciar a gravação: ' + e2.message, 4500); return false; } }
+  r.ondataavailable = e => { if (e.data && e.data.size) cam.chunks.push(e.data); };
+  r.onstop = finishRec;
+  r.onerror = e => toast('Erro na gravação: ' + ((e.error && e.error.message) || 'desconhecido'), 4500);
+  try { r.start(1000); } catch (e) { try { r.start(); } catch (e2) { toast('Não foi possível iniciar a gravação.', 4500); return false; } }
+  cam.rec = r; cam.t0 = performance.now();
+  cam.timer = setInterval(tickRec, 250); tickRec();
+  setRecUI(true);
+  return true;
+}
+function tickRec(){
+  const s = (performance.now() - cam.t0) / 1000;
+  $('#recTime').textContent = fmtClock(s);
+  if (s > 480 && !cam.warned) { cam.warned = true; toast('8 minutos gravando. Tomadas longas ocupam muita memória no iPhone.', 4500); }
+}
+function setRecUI(on){
+  $('#cmRec').classList.toggle('on', on);
+  $('#cmRec').setAttribute('aria-label', on ? 'Parar gravação' : 'Gravar');
+  $('#recPill').hidden = !on;
+  $('#cmFlip').disabled = on;
+}
+function stopRec(interrupted){
+  if (!isRecording()) return;
+  cam.interrupted = !!interrupted;
+  cam.dur = (performance.now() - cam.t0) / 1000;
+  clearInterval(cam.timer);
+  camP.pause();
+  try { cam.rec.stop(); } catch (_) {}
+  setRecUI(false);
+}
+function finishRec(){
+  const r = cam.rec; cam.rec = null;
+  const type = ((r && r.mimeType) || cam.mime || 'video/mp4').split(';')[0] || 'video/mp4';
+  const blob = new Blob(cam.chunks, {type}); cam.chunks = [];
+  if (!blob.size) { toast('A gravação ficou vazia. Tente de novo.', 4000); return; }
+  const sc = byId(activeId);
+  if (sc) { sc.takes = (sc.takes || 0) + 1; persist(); }
+  const ext = /mp4/.test(type) ? 'mp4' : /webm/.test(type) ? 'webm' : /quicktime/.test(type) ? 'mov' : 'mp4';
+  const d = new Date();
+  cam.take = {blob, type, dur: cam.dur, saved: false, interrupted: cam.interrupted,
+    name: `${slug(sc ? sc.name : 'video')}-take${pad2(sc ? sc.takes : 1)}-${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}.${ext}`};
+  stopStream();
+  openReview();
+}
+function openReview(){
+  const t = cam.take, v = $('#revVideo');
+  if (t.url) URL.revokeObjectURL(t.url);
+  t.url = URL.createObjectURL(t.blob); v.src = t.url;
+  $('#revInfo').innerHTML = `<b>${esc(t.name)}</b><span>${fmtDur(t.dur)} · ${(t.blob.size / 1048576).toFixed(1)} MB · ${esc(t.type || 'formato desconhecido')}</span>` +
+    (t.interrupted ? '<em>A gravação foi interrompida porque o app saiu da tela. O trecho até ali foi preservado.</em>' : '') +
+    (/webm/.test(t.type) ? '<em>Formato WebM: o app Fotos do iPhone não abre este formato.</em>' : '');
+  $('#review').hidden = false;
+}
+async function shareTake(){
+  const t = cam.take; if (!t) return;
+  const file = new File([t.blob], t.name, {type: t.type || 'video/mp4'});
+  let can = false; try { can = !!(navigator.canShare && navigator.canShare({files: [file]})); } catch (_) {}
+  if (can) {
+    try { await navigator.share({files: [file], title: t.name}); t.saved = true; toast('Compartilhamento concluído.'); return; }
+    catch (e) { if (e && e.name === 'AbortError') return; }
+  }
+  downloadBlob(file, t.name); t.saved = true;
+  toast(isIOS ? 'Download iniciado. O arquivo vai para o app Arquivos › Downloads.' : 'Download iniciado.', 4500);
+}
+function closeReview(next){
+  const t = cam.take, v = $('#revVideo');
+  v.pause(); v.removeAttribute('src'); v.load();
+  if (t && t.url) URL.revokeObjectURL(t.url);
+  cam.take = null; $('#review').hidden = true;
+  if (next === 'exit') back(); else startCamera();
+}
+$('#revShare').addEventListener('click', shareTake);
+$('#revRetake').addEventListener('click', e => { if (cam.take && !cam.take.saved) armConfirm(e.currentTarget, 'Descartar tomada?', () => closeReview('retake')); else closeReview('retake'); });
+$('#revExit').addEventListener('click', e => { if (cam.take && !cam.take.saved) armConfirm(e.currentTarget, 'Descartar e sair?', () => closeReview('exit')); else closeReview('exit'); });
+
+function downloadBlob(blob, name){
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.rel = 'noopener';
+  document.body.append(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 8000);
+}
+
+/* ---------- tela ligada ---------- */
+let wake = null;
+async function requestWake(){
+  try { if (!wake && 'wakeLock' in navigator && !document.hidden) { wake = await navigator.wakeLock.request('screen'); wake.addEventListener('release', () => { wake = null; }); } } catch (_) {}
+}
+function releaseWake(){ try { wake && wake.release(); } catch (_) {} wake = null; }
+
+/* ---------- ciclo de vida (troca de app, bloqueio) ---------- */
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    flushEditor(); cdCancel();
+    readP.pause(); camP.pause();
+    if (isRecording()) stopRec(true);
+  } else {
+    if (current === 'read' || current === 'cam') requestWake();
+    if (current === 'cam' && !cam.take && !camLive()) startCamera();
+  }
+});
+window.addEventListener('pagehide', flushEditor);
+let rzT;
+window.addEventListener('resize', () => { clearTimeout(rzT); rzT = setTimeout(() => { if (current === 'read') readP.layout(); if (current === 'cam') camP.layout(); }, 120); });
+if (window.visualViewport) {
+  const vv = () => document.documentElement.style.setProperty('--vvh', window.visualViewport.height + 'px');
+  window.visualViewport.addEventListener('resize', vv); vv();
+}
+document.fonts && document.fonts.ready.then(() => { if (current === 'read') readP.layout(); if (current === 'cam') camP.layout(); });
+
+/* ---------- teclado / controle Bluetooth ---------- */
+document.addEventListener('keydown', e => {
+  if (!$('#sheet').hidden) { if (e.key === 'Escape') closeSheet(); return; }
+  if (current !== 'read' && current !== 'cam') return;
+  if (e.target.closest && e.target.closest('input,textarea')) return;
+  const p = current === 'read' ? readP : camP;
+  const line = S[p.fontKey] * S.line;
+  switch (e.key) {
+    case ' ': case 'Enter': case 'k': e.preventDefault(); current === 'read' ? readToggle() : camP.onTap(); break;
+    case 'ArrowRight': case 'PageDown': e.preventDefault(); setWpm(S.wpm + 5); break;
+    case 'ArrowLeft': case 'PageUp': e.preventDefault(); setWpm(S.wpm - 5); break;
+    case 'ArrowDown': e.preventDefault(); p.nudge(line * 2); break;
+    case 'ArrowUp': e.preventDefault(); p.nudge(-line * 2); break;
+    case 'r': case 'R': p.restart(); break;
+    case 'Escape': if (current === 'read') back(); break;
+  }
+});
+
+/* ---------- folha (bottom sheet) ---------- */
+function openSheet(title, body, opts = {}){
+  $('#sheetTitle').textContent = title;
+  const b = $('#sheetBody'); b.innerHTML = ''; b.append(body);
+  $('#sheet').classList.toggle('peek', !!opts.peek);
+  $('#sheet').hidden = false;
+  if (opts.focus) setTimeout(() => { const f = b.querySelector(opts.focus); f && f.focus(); }, 60);
+}
+function closeSheet(){ $('#sheet').hidden = true; $('#sheetBody').innerHTML = ''; }
+$('#sheetScrim').addEventListener('click', closeSheet);
+function el(html){ const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstElementChild; }
+function frag(...nodes){ const d = document.createElement('div'); nodes.filter(Boolean).forEach(n => d.append(n)); return d; }
+
+function applySettings(){
+  document.documentElement.style.setProperty('--band', S.camBand + '%');
+  if (current === 'read') readP.layout();
+  if (current === 'cam') camP.layout();
+  speedLabels();
+}
+function rangeRow(label, key, min, max, step, fmt){
+  const id = 'set-' + key;
+  const r = el(`<div class="row"><label class="row-head" for="${id}"><span>${esc(label)}</span><output>${esc(fmt(S[key]))}</output></label><input type="range" id="${id}" min="${min}" max="${max}" step="${step}" value="${S[key]}"></div>`);
+  const inp = r.querySelector('input'), out = r.querySelector('output');
+  inp.addEventListener('input', () => { S[key] = parseFloat(inp.value); out.textContent = fmt(S[key]); saveSettings(); applySettings(); });
+  return r;
+}
+function segRow(label, key, options){
+  const r = el(`<div class="row"><div class="row-head"><span>${esc(label)}</span></div><div class="seg" role="group" aria-label="${esc(label)}"></div></div>`);
+  const seg = r.querySelector('.seg');
+  options.forEach(([val, txt]) => {
+    const b = el(`<button type="button">${esc(txt)}</button>`);
+    b.setAttribute('aria-pressed', String(S[key] === val));
+    b.addEventListener('click', () => { S[key] = val; saveSettings(); $$('button', seg).forEach(x => x.setAttribute('aria-pressed', String(x === b))); applySettings(); });
+    seg.append(b);
+  });
+  return r;
+}
+function toggleRow(label, key){
+  const r = el(`<div class="row inline"><span>${esc(label)}</span><button type="button" class="tgl" role="switch" aria-label="${esc(label)}"></button></div>`);
+  const t = r.querySelector('.tgl'); t.setAttribute('aria-checked', String(!!S[key]));
+  t.addEventListener('click', () => { S[key] = !S[key]; t.setAttribute('aria-checked', String(S[key])); saveSettings(); applySettings(); });
+  return r;
+}
+const fmtPx = v => v + ' px', fmtPct = v => v + '%', fmtWpm = v => v + ' ppm', fmtLine = v => Number(v).toFixed(2);
+function openReadSettings(){
+  readP.pause();
+  let fs = null;
+  if (fsSupported) {
+    fs = el(`<div class="acts"><button class="btn wide">${svg('full')}Tela cheia</button></div>`);
+    fs.querySelector('button').addEventListener('click', () => {
+      const d = document.documentElement, req = d.requestFullscreen || d.webkitRequestFullscreen;
+      try { const p = req && req.call(d); p && p.catch && p.catch(() => toast('Tela cheia não liberada neste navegador.')); } catch (_) { toast('Tela cheia não liberada neste navegador.'); }
+      closeSheet();
+    });
+  }
+  openSheet('Ajustes de leitura', frag(
+    rangeRow('Velocidade', 'wpm', 60, 260, 5, fmtWpm),
+    rangeRow('Tamanho da fonte', 'font', 24, 110, 2, fmtPx),
+    rangeRow('Espaço entre linhas', 'line', 1.1, 2.2, .05, fmtLine),
+    rangeRow('Largura do texto', 'width', 50, 100, 2, fmtPct),
+    segRow('Alinhamento', 'align', [['left', 'Esquerda'], ['center', 'Centro']]),
+    segRow('Fonte', 'face', [['read', 'Alta legibilidade'], ['system', 'Sistema'], ['serif', 'Serifada']]),
+    segRow('Contagem antes de começar', 'countdown', [[0, 'Sem'], [3, '3 s'], [5, '5 s']]),
+    toggleRow('Linha-guia de leitura', 'guide'),
+    toggleRow('Espelhar texto (prompter com espelho)', 'mirror'),
+    fs
+  ), {peek: true});
+}
+function openCamSettings(){
+  let info = '';
+  try {
+    const vt = cam.stream && cam.stream.getVideoTracks()[0];
+    const st = vt && vt.getSettings ? vt.getSettings() : null;
+    const res = st && st.width ? `${st.width}×${st.height}${st.frameRate ? ' · ' + Math.round(st.frameRate) + ' fps' : ''}` : 'câmera desligada';
+    const mime = pickMime() || (window.MediaRecorder ? 'padrão do navegador' : 'gravação indisponível');
+    info = `<div class="row inline"><span>Resolução da câmera</span><span class="mono">${esc(res)}</span></div><div class="row inline"><span>Formato de gravação</span><span class="mono">${esc(mime.split(';')[0])}</span></div>`;
+  } catch (_) {}
+  openSheet('Câmera e texto', frag(
+    rangeRow('Velocidade', 'wpm', 60, 260, 5, fmtWpm),
+    rangeRow('Tamanho da fonte', 'camFont', 16, 64, 1, fmtPx),
+    rangeRow('Altura da faixa de texto', 'camBand', 25, 70, 1, fmtPct),
+    rangeRow('Espaço entre linhas', 'line', 1.1, 2.2, .05, fmtLine),
+    segRow('Alinhamento', 'align', [['left', 'Esquerda'], ['center', 'Centro']]),
+    segRow('Contagem antes de gravar', 'countdown', [[0, 'Sem'], [3, '3 s'], [5, '5 s']]),
+    toggleRow('Rolar o texto ao começar a gravar', 'camAutoScroll'),
+    toggleRow('Linha-guia de leitura', 'guide'),
+    info ? el(`<div>${info}</div>`) : null
+  ), {peek: true});
+}
+
+/* ---------- início ---------- */
+function renderHome(){
+  const sc = byId(S.lastId);
+  $('#continueCard').hidden = !sc;
+  if (sc) { const w = countWords(sc.text); $('#cName').textContent = sc.name; $('#cMeta').textContent = `${w} palavras · ≈ ${fmtDur(estSec(w))} a ${S.wpm} ppm`; }
+  $('#libCount').textContent = scripts.length === 1 ? '1 salvo' : scripts.length + ' salvos';
+  $('#installTip').hidden = !(isIOS && !isStandalone && !inFrame && !load(K.tip, false));
+}
+$('#tipClose').addEventListener('click', () => { save(K.tip, true); $('#installTip').hidden = true; });
+$('#continueCard').addEventListener('click', () => openEditor(S.lastId));
+$('#btnNew').addEventListener('click', newScript);
+$('#btnRecord').addEventListener('click', () => withScript('Gravar com qual roteiro?', openCam));
+$('#btnRead').addEventListener('click', () => withScript('Ler qual roteiro?', openRead));
+function withScript(title, fn){
+  if (!scripts.length) { newScript(); toast('Escreva o roteiro primeiro.'); return; }
+  if (scripts.length === 1) { fn(scripts[0].id); return; }
+  const m = el('<div class="menu"></div>');
+  [...scripts].sort((a, b) => (b.id === S.lastId) - (a.id === S.lastId) || b.updated - a.updated).forEach(sc => {
+    const w = countWords(sc.text);
+    const b = el(`<button type="button"><span style="flex:1;min-width:0"><span style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600"></span><span class="lib-meta" style="display:block">${w} palavras · ≈ ${fmtDur(estSec(w))}</span></span></button>`);
+    b.querySelector('span span').textContent = sc.name;
+    b.addEventListener('click', () => { closeSheet(); fn(sc.id); });
+    m.append(b);
+  });
+  openSheet(title, m);
+}
+$$('[data-go]').forEach(b => b.addEventListener('click', () => go(b.dataset.go)));
+$$('[data-back]').forEach(b => b.addEventListener('click', back));
+
+/* ---------- biblioteca ---------- */
+function renderLibrary(){
+  const ul = $('#libList'); ul.innerHTML = '';
+  const list = [...scripts].sort((a, b) => b.updated - a.updated);
+  $('#libEmpty').hidden = list.length > 0; ul.hidden = !list.length;
+  list.forEach(sc => {
+    const w = countWords(sc.text);
+    const li = el(`<li class="lib-item"><button type="button" class="lib-open"><div class="lib-name"></div><div class="lib-meta">${w} palavras · ≈ ${fmtDur(estSec(w))} · ${esc(fmtDate(sc.updated))}${sc.takes ? ` · ${sc.takes} ${sc.takes > 1 ? 'tomadas' : 'tomada'}` : ''}</div></button><button type="button" class="icon-btn" aria-label="Opções de ${esc(sc.name)}">${svg('more')}</button></li>`);
+    li.querySelector('.lib-name').textContent = sc.name;
+    li.querySelector('.lib-open').addEventListener('click', () => openEditor(sc.id));
+    li.querySelector('.icon-btn').addEventListener('click', () => scriptMenu(sc.id));
+    ul.append(li);
+  });
+}
+$('#libNew').addEventListener('click', newScript);
+$('#libImport').addEventListener('click', () => $('#fileTxt').click());
+$('#fileTxt').addEventListener('change', async e => {
+  const files = [...e.target.files]; let n = 0;
+  for (const f of files) {
+    if (f.size > 2e6) { toast(`${f.name}: arquivo grande demais para um roteiro.`); continue; }
+    try { const text = (await f.text()).replace(/\r\n?/g, '\n'); createScript(f.name.replace(/\.[^.]+$/, ''), text); n++; }
+    catch (_) { toast(`Não foi possível ler ${f.name}.`); }
+  }
+  e.target.value = '';
+  renderLibrary();
+  if (n) toast(n === 1 ? 'Roteiro importado.' : `${n} roteiros importados.`);
+});
+
+function scriptMenu(id){
+  const sc = byId(id); if (!sc) return;
+  const m = el('<div class="menu"></div>');
+  const item = (icon, label, fn, cls) => { const b = el(`<button type="button"${cls ? ` class="${cls}"` : ''}>${svg(icon)}<span>${esc(label)}</span></button>`); b.addEventListener('click', () => fn(b)); m.append(b); };
+  if (current !== 'editor') item('edit', 'Editar', () => { closeSheet(); openEditor(id); });
+  item('read', 'Ler em tela cheia', () => { closeSheet(); openRead(id); });
+  item('rec', 'Gravar com a câmera', () => { closeSheet(); openCam(id); });
+  item('copy', 'Duplicar', () => { const c = createScript(sc.name + ' (cópia)', sc.text); closeSheet(); toast('Roteiro duplicado.'); if (current === 'library') renderLibrary(); else openEditor(c.id, true); });
+  item('edit', 'Renomear', () => renameSheet(id));
+  item('share', 'Exportar TXT', () => { closeSheet(); exportTxt(sc); });
+  if (!inFrame && location.protocol.startsWith('http')) item('send', 'Enviar para outro aparelho', () => { closeSheet(); sendLink(sc); });
+  item('trash', 'Excluir', b => armConfirm(b, 'Toque de novo para excluir', () => { deleteScript(id); closeSheet(); }), 'danger');
+  openSheet(sc.name, m);
+}
+function renameSheet(id){
+  const sc = byId(id);
+  const body = el(`<div><input class="field" id="renameInput" maxlength="80" aria-label="Novo nome"><div class="acts"><button class="btn primary wide" type="button">Salvar nome</button></div></div>`);
+  const inp = body.querySelector('input'); inp.value = sc.name;
+  const ok = () => { const v = inp.value.trim(); if (!v) return; sc.name = v; sc.updated = Date.now(); persist(); closeSheet(); if (current === 'library') renderLibrary(); if (current === 'editor' && editId === id) $('#edName').value = v; };
+  body.querySelector('button').addEventListener('click', ok);
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter') ok(); });
+  openSheet('Renomear roteiro', body, {focus: '#renameInput'});
+}
+function deleteScript(id){
+  scripts = scripts.filter(s => s.id !== id); persist();
+  if (S.lastId === id) setLast(null);
+  toast('Roteiro excluído.');
+  if (current === 'editor' && editId === id) { editId = null; back(); }
+  else if (current === 'library') renderLibrary();
+}
+async function exportTxt(sc){
+  const file = new File([sc.text], slug(sc.name) + '.txt', {type: 'text/plain'});
+  let can = false; try { can = !!(navigator.canShare && navigator.canShare({files: [file]})); } catch (_) {}
+  if (can) { try { await navigator.share({files: [file]}); return; } catch (e) { if (e && e.name === 'AbortError') return; } }
+  downloadBlob(file, file.name);
+}
+
+/* ---------- enviar roteiro por link (texto no próprio link, sem servidor) ---------- */
+function b64u(u8){ let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
+function unb64u(str){ str = str.replace(/-/g, '+').replace(/_/g, '/'); while (str.length % 4) str += '='; const bin = atob(str); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; }
+async function packScript(obj){
+  const raw = new TextEncoder().encode(JSON.stringify(obj));
+  if ('CompressionStream' in window) {
+    try { const buf = await new Response(new Blob([raw]).stream().pipeThrough(new CompressionStream('deflate-raw'))).arrayBuffer(); return 'z' + b64u(new Uint8Array(buf)); } catch (_) {}
+  }
+  return 'u' + b64u(raw);
+}
+async function unpackScript(s){
+  let bytes = unb64u(s.slice(1));
+  if (s[0] === 'z') bytes = new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer());
+  return JSON.parse(new TextDecoder().decode(bytes));
+}
+async function sendLink(sc){
+  const url = location.origin + location.pathname + '#r=' + await packScript({n: sc.name, t: sc.text});
+  try { if (navigator.share) { await navigator.share({title: sc.name, url}); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
+  try { await navigator.clipboard.writeText(url); toast('Link copiado. Abra no outro aparelho.'); }
+  catch (_) {
+    const body = el('<div><p class="sub">Copie este link e abra no outro aparelho.</p><textarea class="field" style="min-height:120px;padding:12px" readonly></textarea></div>');
+    body.querySelector('textarea').value = url; openSheet('Link do roteiro', body);
+    setTimeout(() => body.querySelector('textarea').select(), 80);
+  }
+}
+async function checkIncoming(){
+  if (!location.hash.startsWith('#r=')) return;
+  const packed = location.hash.slice(3);
+  try { history.replaceState(null, '', location.pathname + location.search); } catch (_) {}
+  try {
+    const o = await unpackScript(packed);
+    if (!o || typeof o.t !== 'string') throw 0;
+    const w = countWords(o.t);
+    const body = el(`<div><p class="sub"></p><div class="acts"><button class="btn primary wide" type="button" data-a="save">Salvar e abrir</button><button class="btn wide" type="button" data-a="read">Salvar e ler agora</button><button class="btn wide" type="button" data-a="no">Ignorar</button></div></div>`);
+    body.querySelector('p').textContent = `“${o.n || 'Roteiro'}” · ${w} palavras · ≈ ${fmtDur(estSec(w))}`;
+    body.addEventListener('click', e => {
+      const a = e.target.closest('button') && e.target.closest('button').dataset.a; if (!a) return;
+      closeSheet(); if (a === 'no') return;
+      const sc = createScript(o.n || 'Roteiro recebido', o.t);
+      a === 'read' ? openRead(sc.id) : openEditor(sc.id);
+    });
+    openSheet('Roteiro recebido', body);
+  } catch (_) { toast('O link do roteiro está incompleto ou corrompido.', 4500); }
+}
+
+/* ---------- editor ---------- */
+let editId = null, saveT = null;
+function newScript(){ const sc = createScript(); openEditor(sc.id, false, true); }
+function openEditor(id, replace, isNew){
+  const sc = byId(id); if (!sc) { toast('Roteiro não encontrado.'); return; }
+  flushEditor();
+  editId = id; setLast(id);
+  $('#edName').value = sc.name; $('#edText').value = sc.text;
+  $('#edSaved').textContent = 'Salvo';
+  edStats();
+  if (current === 'editor') { if (!replace) {} } else go('editor');
+  if (isNew) setTimeout(() => $('#edText').focus(), 80);
+}
+function edStats(){
+  const w = countWords($('#edText').value);
+  $('#edWords').textContent = w === 1 ? '1 palavra' : w + ' palavras';
+  $('#edDur').textContent = `≈ ${fmtDur(estSec(w))} a ${S.wpm} ppm`;
+}
+function flushEditor(){
+  if (!editId || !saveT) return;
+  clearTimeout(saveT); saveT = null;
+  const sc = byId(editId); if (!sc) return;
+  sc.text = $('#edText').value; sc.name = $('#edName').value.trim() || sc.name; sc.updated = Date.now();
+  persist(); $('#edSaved').textContent = 'Salvo';
+}
+function schedule(){ $('#edSaved').textContent = 'Salvando…'; clearTimeout(saveT); saveT = setTimeout(flushEditor, 450); }
+$('#edText').addEventListener('input', () => { edStats(); schedule(); });
+$('#edName').addEventListener('input', schedule);
+$('#edName').addEventListener('blur', () => { if (!$('#edName').value.trim()) { const sc = byId(editId); if (sc) $('#edName').value = sc.name; } flushEditor(); });
+$('#edMore').addEventListener('click', () => { flushEditor(); scriptMenu(editId); });
+$('#edRead').addEventListener('click', () => { flushEditor(); if (!countWords($('#edText').value)) return toast('O roteiro está vazio.'); openRead(editId); });
+$('#edRec').addEventListener('click', () => { flushEditor(); if (!countWords($('#edText').value)) return toast('O roteiro está vazio.'); openCam(editId); });
+
+/* ---------- diagnóstico ---------- */
+async function renderDiag(){
+  const rows = [];
+  const add = (label, st, detail) => rows.push(`<tr><td><span class="st ${st}"></span>${esc(label)}</td><td>${esc(detail)}</td></tr>`);
+  const iosV = (navigator.userAgent.match(/OS (\d+)_(\d+)/) || [])[0];
+  add('Sistema', 'ok', iosV ? 'iOS ' + iosV.slice(3).replace('_', '.') : (isIOS ? 'iOS' : 'não é iPhone'));
+  add('Conexão segura (HTTPS)', window.isSecureContext ? 'ok' : 'no', window.isSecureContext ? 'sim' : 'não: câmera bloqueada');
+  if (inFrame) add('Rodando dentro de outra página', 'warn', 'câmera e instalação bloqueadas nesta prévia');
+  const gum = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+  add('Acesso à câmera', gum ? 'ok' : 'no', gum ? 'disponível' : 'indisponível');
+  const mime = pickMime();
+  add('Gravação de vídeo', window.MediaRecorder ? 'ok' : 'no', window.MediaRecorder ? (mime ? mime.split(';')[0] : 'formato padrão') : 'indisponível');
+  let shareFiles = false; try { shareFiles = !!(navigator.canShare && navigator.canShare({files: [new File(['x'], 'teste.mp4', {type: 'video/mp4'})]})); } catch (_) {}
+  add('Salvar vídeo pelo menu Compartilhar', shareFiles ? 'ok' : 'warn', shareFiles ? 'disponível' : 'usa download como alternativa');
+  add('Manter a tela ligada', 'wakeLock' in navigator ? 'ok' : 'warn', 'wakeLock' in navigator ? 'disponível' : 'ajuste o Bloqueio Automático');
+  add('Instalado na Tela de Início', isStandalone ? 'ok' : 'warn', isStandalone ? 'sim' : 'não');
+  const swOn = !!(navigator.serviceWorker && navigator.serviceWorker.controller);
+  add('Funciona sem internet', swOn ? 'ok' : 'warn', swOn ? 'sim' : 'ainda não (abra uma vez com internet)');
+  let persisted = null; try { persisted = navigator.storage && navigator.storage.persisted ? await navigator.storage.persisted() : null; } catch (_) {}
+  add('Armazenamento protegido contra limpeza', persisted ? 'ok' : 'warn', persisted ? 'sim' : 'não garantido: exporte backups em TXT');
+  add('Tela cheia por botão', fsSupported ? 'ok' : 'warn', fsSupported ? 'disponível' : 'não no iPhone; instale o app');
+  add('Roteiros salvos', 'ok', String(scripts.length));
+  $('#diag').innerHTML = rows.join('');
+}
+
+/* ---------- ícones e arranque ---------- */
+$$('[data-i]').forEach(b => b.insertAdjacentHTML('afterbegin', svg(b.dataset.i)));
+$('#rdPlay').innerHTML = svg('play'); $('#cmPlay').innerHTML = svg('play');
+applySettings();
+renderHome();
+checkIncoming();
+if ('serviceWorker' in navigator && !inFrame && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
+}
+window.__tp = {readP, camP, get S(){ return S; }, get scripts(){ return scripts; }, cam};
+})();
+</script>
+
+</body>
+</html>
